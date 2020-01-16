@@ -39,7 +39,7 @@ import six
 from typing import List
 
 from connect import Env
-from connect.models import Request
+from connect.models import AssetRequest
 
 
 class MigrationAbortError(Exception):
@@ -65,7 +65,8 @@ class MigrationHandler(object):
       in the migration data on direct assignation flow. Default value is ``False``.
     """
 
-    def __init__(self, transformations=None, migration_key='migration_info', serialize=False):
+    def __init__(self, transformations=None, migration_key='migration_info',
+                 serialize=False):
         self._transformations = transformations or {}
         self._migration_key = migration_key
         self._serialize = serialize
@@ -98,27 +99,30 @@ class MigrationHandler(object):
     def migrate(self, request):
         """ Call this function to perform migration of one request.
 
-        :param Request request: The request to migrate.
+        :param AssetRequest request: The request to migrate.
         :return: A new request object with the parameter values updated.
-        :rtype: Request
+        :rtype: AssetRequest
         :raises MigrationParamError: Raised if the value for a parameter is not a string.
         """
         if request.needsMigration(self.migration_key):
-            Env.getLogger().info('[MIGRATION::{}] Running migration operations for request {}'
-                        .format(request.id, request.id))
+            Env.getLogger().info(
+                '[MIGRATION::{}] Running migration operations for request {}'
+                .format(request.id, request.id))
             request_copy = copy.deepcopy(request)
 
             raw_data = request.asset.get_param_by_id(self.migration_key).value
             Env.getLogger().debug('[MIGRATION::{}] Migration data `{}`: {}'
-                         .format(request.id, self.migration_key, raw_data))
+                                  .format(request.id, self.migration_key,
+                                          raw_data))
 
             try:
                 try:
                     parsed_data = json.loads(raw_data)
                 except ValueError as ex:
                     raise MigrationAbortError(str(ex))
-                Env.getLogger().debug('[MIGRATION::{}] Migration data `{}` parsed correctly'
-                             .format(request.id, self.migration_key))
+                Env.getLogger().debug(
+                    '[MIGRATION::{}] Migration data `{}` parsed correctly'
+                    .format(request.id, self.migration_key))
 
                 # These will keep track of processing status
                 processed_params = []
@@ -135,56 +139,65 @@ class MigrationHandler(object):
                     try:
                         if param.id in self.transformations:
                             # Transformation is defined, so apply it
-                            Env.getLogger().info('[MIGRATION::{}] Running transformation for parameter {}'
-                                        .format(request.id, param.id))
-                            param.value = self.transformations[param.id](parsed_data, request.id)
+                            Env.getLogger().info(
+                                '[MIGRATION::{}] Running transformation for parameter {}'
+                                .format(request.id, param.id))
+                            param.value = self.transformations[param.id](
+                                parsed_data, request.id)
                             succeeded_params.append(param.id)
                         elif param.id in parsed_data:
                             # Parsed data contains the key, so assign it
-                            if not isinstance(parsed_data[param.id], six.string_types):
+                            if not isinstance(parsed_data[param.id],
+                                              six.string_types):
                                 if self.serialize:
-                                    parsed_data[param.id] = json.dumps(parsed_data[param.id])
+                                    parsed_data[param.id] = json.dumps(
+                                        parsed_data[param.id])
                                 else:
-                                    type_name = type(parsed_data[param.id]).__name__
+                                    type_name = type(
+                                        parsed_data[param.id]).__name__
                                     raise MigrationParamError(
                                         'Parameter {} type must be str, but {} was given'
-                                        .format(param.id, type_name))
+                                            .format(param.id, type_name))
                             param.value = parsed_data[param.id]
                             succeeded_params.append(param.id)
                         else:
                             skipped_params.append(param.id)
                     except MigrationParamError as ex:
-                        Env.getLogger().error('[MIGRATION::{}] {}'.format(request.id, ex))
+                        Env.getLogger().error(
+                            '[MIGRATION::{}] {}'.format(request.id, ex))
                         failed_params.append(param.id)
 
                     # Report processed param
                     processed_params.append(param.id)
 
-                Env.getLogger().info('[MIGRATION::{}] {} processed, {} succeeded{}, {} failed{}, '
-                            '{} skipped{}.'
-                            .format(
-                                request.id,
-                                len(processed_params),
-                                len(succeeded_params),
-                                self._format_params(succeeded_params),
-                                len(failed_params),
-                                self._format_params(failed_params),
-                                len(skipped_params),
-                                self._format_params(skipped_params)))
+                Env.getLogger().info(
+                    '[MIGRATION::{}] {} processed, {} succeeded{}, {} failed{}, '
+                    '{} skipped{}.'
+                        .format(
+                        request.id,
+                        len(processed_params),
+                        len(succeeded_params),
+                        self._format_params(succeeded_params),
+                        len(failed_params),
+                        self._format_params(failed_params),
+                        len(skipped_params),
+                        self._format_params(skipped_params)))
 
                 # Raise abort if any params failed
                 if failed_params:
                     raise MigrationAbortError(
                         'Processing of parameters {} failed, unable to complete migration.'
-                        .format(', '.join(failed_params)))
+                            .format(', '.join(failed_params)))
             except MigrationAbortError as ex:
-                Env.getLogger().error('[MIGRATION::{}] {}'.format(request.id, ex))
+                Env.getLogger().error(
+                    '[MIGRATION::{}] {}'.format(request.id, ex))
                 raise
 
             return request_copy
         else:
-            Env.getLogger().info('[MIGRATION::{}] Request does not need migration.'
-                        .format(request.id))
+            Env.getLogger().info(
+                '[MIGRATION::{}] AssetRequest does not need migration.'
+                .format(request.id))
             return request
 
     @staticmethod
